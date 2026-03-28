@@ -9,7 +9,7 @@ function ParticleField({ mouse }: { mouse: React.MutableRefObject<{ x: number; y
   const materialRef = useRef<THREE.ShaderMaterial>(null);
   const timeRef = useRef(0);
 
-  const particleCount = 8000;
+  const particleCount = 3500;
 
   const { positions, originalPositions, sizes, colors } = useMemo(() => {
     const positions = new Float32Array(particleCount * 3);
@@ -33,10 +33,10 @@ function ParticleField({ mouse }: { mouse: React.MutableRefObject<{ x: number; y
 
       const radius = r * (0.5 + 0.5 * cosQPhi);
       
-      // Add some noise
-      const noise = (Math.random() - 0.5) * 0.8;
-      const noise2 = (Math.random() - 0.5) * 0.8;
-      const noise3 = (Math.random() - 0.5) * 0.8;
+      // Subtle noise for organic feel without looking scattered
+      const noise = (Math.random() - 0.5) * 0.15;
+      const noise2 = (Math.random() - 0.5) * 0.15;
+      const noise3 = (Math.random() - 0.5) * 0.15;
 
       positions[i3] = radius * cosPhi + noise;
       positions[i3 + 1] = radius * sinPhi + noise2;
@@ -46,25 +46,26 @@ function ParticleField({ mouse }: { mouse: React.MutableRefObject<{ x: number; y
       originalPositions[i3 + 1] = positions[i3 + 1];
       originalPositions[i3 + 2] = positions[i3 + 2];
 
-      sizes[i] = Math.random() * 3 + 1;
+      sizes[i] = Math.random() * 0.8 + 0.4;
 
-      // Orange to white gradient coloring
+      // Color based on position along the knot for a gradient look
+      const tNorm = i / particleCount;
       const colorMix = Math.random();
-      if (colorMix < 0.4) {
-        // Orange particles
-        colors[i3] = 0.976;     // R
-        colors[i3 + 1] = 0.451; // G
-        colors[i3 + 2] = 0.086; // B
-      } else if (colorMix < 0.7) {
-        // Bright orange
-        colors[i3] = 1.0;
+      if (colorMix < 0.6) {
+        // Main orange — varies along the shape
+        colors[i3] = 0.88 + tNorm * 0.07;
+        colors[i3 + 1] = 0.35 + tNorm * 0.1;
+        colors[i3 + 2] = 0.04;
+      } else if (colorMix < 0.85) {
+        // Warm mid-tone
+        colors[i3] = 0.92;
+        colors[i3 + 1] = 0.48;
+        colors[i3 + 2] = 0.08;
+      } else {
+        // Subtle amber accent
+        colors[i3] = 0.95;
         colors[i3 + 1] = 0.6;
         colors[i3 + 2] = 0.2;
-      } else {
-        // White/light particles
-        colors[i3] = 1.0;
-        colors[i3 + 1] = 0.85;
-        colors[i3 + 2] = 0.7;
       }
     }
 
@@ -101,23 +102,23 @@ function ParticleField({ mouse }: { mouse: React.MutableRefObject<{ x: number; y
           pos.x = x;
           pos.z = z;
           
-          // Wave distortion
-          pos.y += sin(pos.x * 0.5 + uTime * 0.3) * 0.3;
-          pos.x += cos(pos.y * 0.5 + uTime * 0.2) * 0.2;
+          // Gentle wave distortion — keeps shape readable
+          pos.y += sin(pos.x * 0.5 + uTime * 0.3) * 0.1;
+          pos.x += cos(pos.y * 0.5 + uTime * 0.2) * 0.08;
           
-          // Mouse interaction - push particles
-          float mouseInfluence = smoothstep(3.0, 0.0, length(pos.xy - uMouse * 3.0));
-          pos.z += mouseInfluence * 1.5;
-          pos.x += (pos.x - uMouse.x * 3.0) * mouseInfluence * 0.3;
-          pos.y += (pos.y - uMouse.y * 3.0) * mouseInfluence * 0.3;
+          // Subtle mouse interaction
+          float mouseInfluence = smoothstep(2.5, 0.0, length(pos.xy - uMouse * 3.0));
+          pos.z += mouseInfluence * 0.8;
+          pos.x += (pos.x - uMouse.x * 3.0) * mouseInfluence * 0.15;
+          pos.y += (pos.y - uMouse.y * 3.0) * mouseInfluence * 0.15;
           
           vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
           gl_Position = projectionMatrix * mvPosition;
-          gl_PointSize = aSize * uPixelRatio * (200.0 / -mvPosition.z);
+          gl_PointSize = aSize * uPixelRatio * (100.0 / -mvPosition.z);
           
           vColor = aColor;
           float dist = length(pos);
-          vAlpha = smoothstep(5.0, 0.0, dist) * (0.6 + 0.4 * sin(uTime + float(gl_VertexID) * 0.01));
+          vAlpha = smoothstep(4.5, 0.0, dist) * (0.35 + 0.15 * sin(uTime * 0.8 + float(gl_VertexID) * 0.005));
         }
       `,
       fragmentShader: `
@@ -128,8 +129,10 @@ function ParticleField({ mouse }: { mouse: React.MutableRefObject<{ x: number; y
           float d = length(gl_PointCoord - vec2(0.5));
           if (d > 0.5) discard;
           
-          float alpha = smoothstep(0.5, 0.0, d) * vAlpha;
-          gl_FragColor = vec4(vColor, alpha);
+          // Soft, clean circular particle with smooth falloff
+          float alpha = smoothstep(0.5, 0.1, d) * vAlpha;
+          vec3 col = vColor * (0.8 + 0.2 * smoothstep(0.5, 0.0, d));
+          gl_FragColor = vec4(col, alpha);
         }
       `,
       transparent: true,
